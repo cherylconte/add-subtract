@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Base-10 Addition/Subtraction Stacked</title>
+<title>Base-10 Addition/Subtraction with Regrouping</title>
 <style>
 body {
   font-family: Arial, sans-serif;
@@ -12,27 +12,35 @@ body {
   display:flex;
   flex-direction:column;
   align-items:center;
-  min-height:100vh;
+  min-height: 100vh;
 }
-h2 { margin:20px; text-align:center; }
+
+h2 { margin: 20px 0; text-align:center; }
+
 #controls {
   margin-bottom: 20px;
-  display:flex;
-  gap:10px;
-  flex-wrap:wrap;
-  justify-content:center;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
 }
-input, button, select { font-size:16px; padding:5px 10px; }
+
+input, button {
+  font-size: 16px;
+  padding: 5px 10px;
+}
+
 #availableBlocks {
   margin-bottom: 20px;
-  display:flex;
-  gap:10px;
-  flex-wrap:wrap;
-  justify-content:center;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
 }
+
 .block {
-  cursor:pointer;
-  user-select:none;
+  cursor: pointer;
+  user-select: none;
   display:flex;
   justify-content:center;
   align-items:center;
@@ -41,6 +49,7 @@ input, button, select { font-size:16px; padding:5px 10px; }
   border-radius:4px;
   transition: transform 0.1s;
 }
+
 .flat { background:#f06; width:200px; height:200px; }
 .rod  { background:#0a0; width:20px; height:200px; }
 .unit { background:#06f; width:20px; height:20px; }
@@ -52,21 +61,23 @@ input, button, select { font-size:16px; padding:5px 10px; }
   background:#fff;
   padding:20px 10px 60px 10px;
   justify-content:flex-start;
-  min-width:90vw;
+  min-width: 90vw;
 }
+
 .column {
   flex:1;
   display:flex;
   flex-direction:column;
-  align-items:center;
+  align-items:flex-start;
   border-left:1px solid #333;
-  min-height:240px;
+  min-height: 250px;
   position:relative;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap:5px;
   padding-top:30px;
 }
 .column:first-child { border-left:none; }
+
 .column-label {
   position:absolute;
   top:0;
@@ -74,10 +85,19 @@ input, button, select { font-size:16px; padding:5px 10px; }
   text-align:center;
   font-weight:bold;
 }
-#equation {
-  margin-top:40px;
-  font-size:24px;
+
+.row-blocks {
+  display:flex;
+  gap:5px;
+  margin-bottom:5px;
 }
+
+#equation {
+  margin-top:20px;
+  font-size:24px;
+  text-align:center;
+}
+
 </style>
 </head>
 <body>
@@ -85,15 +105,19 @@ input, button, select { font-size:16px; padding:5px 10px; }
 <h2>Base-10 Addition/Subtraction with Regrouping</h2>
 
 <div id="controls">
-  <label>Operation:
-    <select id="operation">
-      <option value="add">Addition</option>
-      <option value="subtract">Subtraction</option>
-    </select>
-  </label>
-  <label>Number 1: <input type="number" id="num1" value="267"></label>
-  <label>Number 2: <input type="number" id="num2" value="158"></label>
+  <label>Problem: <input type="text" id="problemInput" value="246 + 175"></label>
   <button id="setup">Set Up</button>
+  <button id="switchRow">Switch Number</button>
+  <select id="operation">
+    <option value="add">Addition</option>
+    <option value="subtract">Subtraction</option>
+  </select>
+</div>
+
+<div id="availableBlocks">
+  <div class="block flat" data-value="100">100</div>
+  <div class="block rod" data-value="10">10</div>
+  <div class="block unit" data-value="1">1</div>
 </div>
 
 <div id="board">
@@ -103,151 +127,129 @@ input, button, select { font-size:16px; padding:5px 10px; }
 </div>
 
 <div id="equation">
-  ___ + ___ = ___
+  246 + 175 = ___ + ___ + ___
 </div>
 
 <script>
-const operationEl = document.getElementById('operation');
-const num1El = document.getElementById('num1');
-const num2El = document.getElementById('num2');
+const problemInput = document.getElementById('problemInput');
 const setupBtn = document.getElementById('setup');
-const hundredsCol = document.getElementById('hundredsCol');
-const tensCol = document.getElementById('tensCol');
-const onesCol = document.getElementById('onesCol');
+const switchRowBtn = document.getElementById('switchRow');
+const operationSelect = document.getElementById('operation');
+const availableBlocks = document.querySelectorAll('#availableBlocks .block');
 
-let currentRow = 0; // 0 = first number, 1 = second number
+const cols = {
+  flat: document.getElementById('hundredsCol'),
+  rod: document.getElementById('tensCol'),
+  unit: document.getElementById('onesCol')
+};
 
-// --- Clear board ---
+let currentRow = 1; // 1 = first number, 2 = second number
+
 function clearBoard() {
-  [hundredsCol, tensCol, onesCol].forEach(col => col.innerHTML = '<div class="column-label">'+col.querySelector('.column-label').innerText+'</div>');
-  updateEquation();
+  Object.values(cols).forEach(col => col.innerHTML = '<div class="column-label">'+col.querySelector('.column-label').innerText+'</div>');
 }
 
-// --- Update equation ---
-function updateEquation(){
-  const h = hundredsCol.children.length-1;
-  const t = tensCol.children.length-1;
-  const o = onesCol.children.length-1;
-  const total = h*100 + t*10 + o*1;
-  const op = operationEl.value==='add'?'+':'-';
-  const result = operationEl.value==='add'? parseInt(num1El.value)+parseInt(num2El.value) : parseInt(num1El.value)-parseInt(num2El.value);
-  document.getElementById('equation').innerText = `${num1El.value} ${op} ${num2El.value} = ${total} (Target: ${result})`;
+// --- Get or create row container ---
+function getRowContainer(col) {
+  let rowContainer = col.querySelector(`.row${currentRow}`);
+  if(!rowContainer){
+    rowContainer = document.createElement('div');
+    rowContainer.classList.add('row-blocks','row'+currentRow);
+    col.appendChild(rowContainer);
+  }
+  return rowContainer;
 }
 
-// --- Create blocks for number ---
-function createBlocksForNumber(num){
-  let hundreds = Math.floor(num/100);
-  let tens = Math.floor((num%100)/10);
-  let ones = num%10;
-  for(let i=0;i<hundreds;i++) addBlock('flat', currentRow);
-  for(let i=0;i<tens;i++) addBlock('rod', currentRow);
-  for(let i=0;i<ones;i++) addBlock('unit', currentRow);
-}
-
-// --- Add block ---
-function addBlock(type,row){
+// --- Add block to column ---
+function addBlockToColumn(type){
   const block = document.createElement('div');
   block.classList.add('block', type);
   block.dataset.value = type==='flat'?100:type==='rod'?10:1;
-  block.dataset.row = row;
-  block.innerText = '';
+  block.innerText = ''; // start blank
+
+  // Click to reveal
   block.addEventListener('click', ()=>{
-    block.innerText = block.innerText===''?block.dataset.value:'';
+    if(block.innerText==='') block.innerText = block.dataset.value;
   });
-  block.addEventListener('mousedown', startDrag);
-  block.addEventListener('touchstart', startDrag);
-  // Append block
-  if(type==='flat') hundredsCol.appendChild(block);
-  else if(type==='rod') tensCol.appendChild(block);
-  else onesCol.appendChild(block);
-  updateEquation();
+
+  // Drag & drop for regrouping
+  block.draggable = true;
+  block.addEventListener('dragstart', e=>{
+    e.dataTransfer.setData('text/plain', JSON.stringify({type:block.className.split(' ')[1], row:currentRow}));
+  });
+
+  const rowContainer = getRowContainer(cols[type]);
+  rowContainer.appendChild(block);
 }
 
-// --- Setup ---
-setupBtn.addEventListener('click', ()=>{
-  clearBoard();
-  currentRow = 0;
-  createBlocksForNumber(parseInt(num1El.value));
-  currentRow = 1;
-  createBlocksForNumber(parseInt(num2El.value));
+// --- Column drop behavior ---
+Object.values(cols).forEach(col => {
+  col.addEventListener('dragover', e=>e.preventDefault());
+  col.addEventListener('drop', e=>{
+    e.preventDefault();
+    const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+    const oldType = data.type;
+    const row = data.row;
+    const targetType = col.id==='hundredsCol'?'flat':col.id==='tensCol'?'rod':'unit';
+    const rowContainer = col.querySelector(`.row${row}`) || (()=>{
+      let rc = document.createElement('div');
+      rc.classList.add('row-blocks','row'+row);
+      col.appendChild(rc);
+      return rc;
+    })();
+
+    const op = operationSelect.value;
+
+    // --- Regrouping logic ---
+    if(oldType === targetType) return; // do nothing if same type
+
+    const blockValue = oldType==='flat'?100:oldType==='rod'?10:1;
+
+    if(op==='add'){
+      // Add: smaller blocks replace bigger one
+      const factor = oldType==='flat'?10:oldType==='rod'?10:1;
+      const newType = oldType==='flat'?'rod':'rod'?'unit':'unit';
+      const count = oldType==='flat'?10:10;
+      for(let i=0;i<count;i++){
+        addBlockToColumn(newType);
+      }
+      // remove dragged block
+      const draggedBlock = document.querySelector(`.${oldType}.row${row}`);
+      if(draggedBlock) draggedBlock.remove();
+
+    } else {
+      // Subtract: moving bigger block into smaller removes it and adds smaller blocks
+      const count = oldType==='flat'?10:oldType==='rod'?10:1;
+      const newType = oldType==='flat'?'rod':'rod'?'unit':'unit';
+      for(let i=0;i<count;i++){
+        addBlockToColumn(newType);
+      }
+      const draggedBlock = document.querySelector(`.${oldType}.row${row}`);
+      if(draggedBlock) draggedBlock.remove();
+    }
+  });
 });
 
-// --- Drag & regroup ---
-let dragBlock=null;
-let offsetX=0, offsetY=0;
+// --- Available block click ---
+availableBlocks.forEach(b => {
+  b.addEventListener('click', ()=>{
+    const type = b.classList.contains('flat')?'flat':b.classList.contains('rod')?'rod':'unit';
+    addBlockToColumn(type);
+  });
+});
 
-function startDrag(e){
-  e.preventDefault();
-  dragBlock = e.target;
-  const rect = dragBlock.getBoundingClientRect();
-  const touch = e.touches ? e.touches[0] : e;
-  offsetX = touch.clientX - rect.left;
-  offsetY = touch.clientY - rect.top;
-  dragBlock.style.position='absolute';
-  dragBlock.style.zIndex='1000';
-  document.body.appendChild(dragBlock);
-  function move(ev){
-    const t = ev.touches ? ev.touches[0] : ev;
-    dragBlock.style.left = (t.clientX - offsetX)+'px';
-    dragBlock.style.top = (t.clientY - offsetY)+'px';
-  }
-  function up(ev){
-    document.removeEventListener('mousemove',move);
-    document.removeEventListener('mouseup',up);
-    document.removeEventListener('touchmove',move);
-    document.removeEventListener('touchend',up);
-    regroupBlock(dragBlock);
-    dragBlock=null;
-  }
-  document.addEventListener('mousemove',move);
-  document.addEventListener('mouseup',up);
-  document.addEventListener('touchmove',move);
-  document.addEventListener('touchend',up);
-}
+// --- Setup button ---
+setupBtn.addEventListener('click', ()=>{
+  clearBoard();
+  currentRow = 1;
+  const problem = problemInput.value;
+  document.getElementById('equation').innerText = problem.replace(/\d+/g,'___');
+});
 
-// --- Regroup ---
-function regroupBlock(block){
-  const val = parseInt(block.dataset.value);
-  const rect = block.getBoundingClientRect();
-  const hRect = hundredsCol.getBoundingClientRect();
-  const tRect = tensCol.getBoundingClientRect();
-  const oRect = onesCol.getBoundingClientRect();
-
-  // --- Addition regroup ---
-  if(operationEl.value==='add'){
-    if(val===1 && countBlocks(onesCol,'unit')>=10){
-      removeBlocks(onesCol,'unit',10);
-      addBlock('rod',0);
-    }
-    if(val===10 && countBlocks(tensCol,'rod')>=10){
-      removeBlocks(tensCol,'rod',10);
-      addBlock('flat',0);
-    }
-  }
-
-  // --- Subtraction regroup ---
-  if(operationEl.value==='subtract'){
-    if(val===100){
-      block.remove();
-      for(let i=0;i<10;i++) addBlock('rod',block.dataset.row);
-    }
-    if(val===10){
-      block.remove();
-      for(let i=0;i<10;i++) addBlock('unit',block.dataset.row);
-    }
-  }
-
-  updateEquation();
-}
-
-function countBlocks(col,type){
-  return Array.from(col.children).filter(b=>b.classList.contains(type)).length;
-}
-
-function removeBlocks(col,type,num){
-  const blocks = Array.from(col.children).filter(b=>b.classList.contains(type));
-  for(let i=0;i<num;i++) blocks[i].remove();
-}
+// --- Switch row button ---
+switchRowBtn.addEventListener('click', ()=>{
+  currentRow = currentRow===1?2:1;
+});
 </script>
 
 </body>
