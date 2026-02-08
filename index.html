@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Base-10 Addition/Subtraction with Regrouping</title>
+<title>Base-10 Addition/Subtraction Stacked</title>
 <style>
 body {
   font-family: Arial, sans-serif;
@@ -14,7 +14,7 @@ body {
   align-items:center;
   min-height:100vh;
 }
-h2 { margin: 20px; text-align:center; }
+h2 { margin:20px; text-align:center; }
 #controls {
   margin-bottom: 20px;
   display:flex;
@@ -57,12 +57,12 @@ input, button, select { font-size:16px; padding:5px 10px; }
 .column {
   flex:1;
   display:flex;
-  flex-direction:row;
-  align-items:flex-start;
+  flex-direction:column;
+  align-items:center;
   border-left:1px solid #333;
-  min-height:80px;
+  min-height:240px;
   position:relative;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap:5px;
   padding-top:30px;
 }
@@ -78,7 +78,6 @@ input, button, select { font-size:16px; padding:5px 10px; }
   margin-top:40px;
   font-size:24px;
 }
-.selected { outline: 3px solid gold; }
 </style>
 </head>
 <body>
@@ -97,12 +96,6 @@ input, button, select { font-size:16px; padding:5px 10px; }
   <button id="setup">Set Up</button>
 </div>
 
-<div id="availableBlocks">
-  <div class="block flat" data-value="100">100</div>
-  <div class="block rod" data-value="10">10</div>
-  <div class="block unit" data-value="1">1</div>
-</div>
-
 <div id="board">
   <div class="column" id="hundredsCol"><div class="column-label">Hundreds</div></div>
   <div class="column" id="tensCol"><div class="column-label">Tens</div></div>
@@ -118,16 +111,15 @@ const operationEl = document.getElementById('operation');
 const num1El = document.getElementById('num1');
 const num2El = document.getElementById('num2');
 const setupBtn = document.getElementById('setup');
-const availableBlocks = document.querySelectorAll('#availableBlocks .block');
 const hundredsCol = document.getElementById('hundredsCol');
 const tensCol = document.getElementById('tensCol');
 const onesCol = document.getElementById('onesCol');
-let selectedBlocks = [];
+
+let currentRow = 0; // 0 = first number, 1 = second number
 
 // --- Clear board ---
 function clearBoard() {
   [hundredsCol, tensCol, onesCol].forEach(col => col.innerHTML = '<div class="column-label">'+col.querySelector('.column-label').innerText+'</div>');
-  selectedBlocks = [];
   updateEquation();
 }
 
@@ -142,30 +134,42 @@ function updateEquation(){
   document.getElementById('equation').innerText = `${num1El.value} ${op} ${num2El.value} = ${total} (Target: ${result})`;
 }
 
+// --- Create blocks for number ---
+function createBlocksForNumber(num){
+  let hundreds = Math.floor(num/100);
+  let tens = Math.floor((num%100)/10);
+  let ones = num%10;
+  for(let i=0;i<hundreds;i++) addBlock('flat', currentRow);
+  for(let i=0;i<tens;i++) addBlock('rod', currentRow);
+  for(let i=0;i<ones;i++) addBlock('unit', currentRow);
+}
+
 // --- Add block ---
-function addBlock(type){
+function addBlock(type,row){
   const block = document.createElement('div');
   block.classList.add('block', type);
   block.dataset.value = type==='flat'?100:type==='rod'?10:1;
-  block.innerText = ''; 
+  block.dataset.row = row;
+  block.innerText = '';
   block.addEventListener('click', ()=>{
     block.innerText = block.innerText===''?block.dataset.value:'';
   });
   block.addEventListener('mousedown', startDrag);
   block.addEventListener('touchstart', startDrag);
-  // Append to board
+  // Append block
   if(type==='flat') hundredsCol.appendChild(block);
   else if(type==='rod') tensCol.appendChild(block);
   else onesCol.appendChild(block);
   updateEquation();
 }
 
-// --- Palette click ---
-availableBlocks.forEach(b=>{
-  b.addEventListener('click',()=>{ 
-    const type = b.classList.contains('flat')?'flat':b.classList.contains('rod')?'rod':'unit';
-    addBlock(type);
-  });
+// --- Setup ---
+setupBtn.addEventListener('click', ()=>{
+  clearBoard();
+  currentRow = 0;
+  createBlocksForNumber(parseInt(num1El.value));
+  currentRow = 1;
+  createBlocksForNumber(parseInt(num2El.value));
 });
 
 // --- Drag & regroup ---
@@ -201,7 +205,7 @@ function startDrag(e){
   document.addEventListener('touchend',up);
 }
 
-// --- Regroup logic ---
+// --- Regroup ---
 function regroupBlock(block){
   const val = parseInt(block.dataset.value);
   const rect = block.getBoundingClientRect();
@@ -209,63 +213,42 @@ function regroupBlock(block){
   const tRect = tensCol.getBoundingClientRect();
   const oRect = onesCol.getBoundingClientRect();
 
-  // If block overlaps target column
-  if(isOverlapping(rect,hRect) && val<100){
-    if(val===10 && operationEl.value==='add'){
-      // tens → hundred if 10 tens exist?
-      const tens = Array.from(tensCol.children).filter(b=>b.dataset.value==='10');
-      if(tens.length>=10){
-        // Remove 10 tens
-        for(let i=0;i<10;i++) tens[i].remove();
-        addBlock('flat'); // Add 1 hundred
-        block.remove();
-      }
-    } else if(val===1 && operationEl.value==='add'){
-      const ones = Array.from(onesCol.children).filter(b=>b.dataset.value==='1');
-      if(ones.length>=10){
-        for(let i=0;i<10;i++) ones[i].remove();
-        addBlock('rod');
-        block.remove();
-      }
+  // --- Addition regroup ---
+  if(operationEl.value==='add'){
+    if(val===1 && countBlocks(onesCol,'unit')>=10){
+      removeBlocks(onesCol,'unit',10);
+      addBlock('rod',0);
+    }
+    if(val===10 && countBlocks(tensCol,'rod')>=10){
+      removeBlocks(tensCol,'rod',10);
+      addBlock('flat',0);
     }
   }
-  else if(isOverlapping(rect,tRect)){
-    if(val===1 && operationEl.value==='add'){
-      const ones = Array.from(onesCol.children).filter(b=>b.dataset.value==='1');
-      if(ones.length>=10){
-        for(let i=0;i<10;i++) ones[i].remove();
-        addBlock('rod');
-        block.remove();
-      }
-    } else if(val===100 && operationEl.value==='subtract'){
+
+  // --- Subtraction regroup ---
+  if(operationEl.value==='subtract'){
+    if(val===100){
       block.remove();
-      for(let i=0;i<10;i++) addBlock('rod');
+      for(let i=0;i<10;i++) addBlock('rod',block.dataset.row);
+    }
+    if(val===10){
+      block.remove();
+      for(let i=0;i<10;i++) addBlock('unit',block.dataset.row);
     }
   }
-  else if(isOverlapping(rect,oRect)){
-    if(val===10 && operationEl.value==='subtract'){
-      block.remove();
-      for(let i=0;i<10;i++) addBlock('unit');
-    } else if(val===100 && operationEl.value==='subtract'){
-      block.remove();
-      for(let i=0;i<10;i++) addBlock('rod');
-    }
-  }
+
   updateEquation();
 }
 
-// --- Overlap helper ---
-function isOverlapping(r1,r2){
-  return !(r1.right<r2.left || r1.left>r2.right || r1.bottom<r2.top || r1.top>r2.bottom);
+function countBlocks(col,type){
+  return Array.from(col.children).filter(b=>b.classList.contains(type)).length;
 }
 
-// --- Setup ---
-setupBtn.addEventListener('click',()=>{
-  clearBoard();
-  updateEquation();
-});
-
+function removeBlocks(col,type,num){
+  const blocks = Array.from(col.children).filter(b=>b.classList.contains(type));
+  for(let i=0;i<num;i++) blocks[i].remove();
+}
 </script>
+
 </body>
 </html>
-
