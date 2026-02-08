@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Base-10 Addition with Regrouping</title>
+<title>Base-10 Addition/Subtraction with Regrouping</title>
 <style>
 body {
   font-family: Arial, sans-serif;
@@ -50,9 +50,9 @@ input, button {
   transition: transform 0.1s;
 }
 
-.flat { background:#f06; width:60px; height:60px; }
-.rod  { background:#0a0; width:40px; height:40px; }
-.unit { background:#06f; width:30px; height:30px; }
+.flat { background:#f06; width:200px; height:200px; }
+.rod  { background:#0a0; width:20px; height:200px; }
+.unit { background:#06f; width:20px; height:20px; }
 
 #board {
   display:flex;
@@ -70,7 +70,7 @@ input, button {
   flex-direction:column;
   align-items:flex-start;
   border-left:1px solid #333;
-  min-height: 120px;
+  min-height: 250px;
   position:relative;
   flex-wrap: wrap;
   gap:5px;
@@ -102,12 +102,16 @@ input, button {
 </head>
 <body>
 
-<h2>Base-10 Addition with Regrouping</h2>
+<h2>Base-10 Addition/Subtraction with Regrouping</h2>
 
 <div id="controls">
   <label>Problem: <input type="text" id="problemInput" value="246 + 175"></label>
   <button id="setup">Set Up</button>
   <button id="switchRow">Switch Number</button>
+  <select id="operation">
+    <option value="add">Addition</option>
+    <option value="subtract">Subtraction</option>
+  </select>
 </div>
 
 <div id="availableBlocks">
@@ -130,6 +134,7 @@ input, button {
 const problemInput = document.getElementById('problemInput');
 const setupBtn = document.getElementById('setup');
 const switchRowBtn = document.getElementById('switchRow');
+const operationSelect = document.getElementById('operation');
 const availableBlocks = document.querySelectorAll('#availableBlocks .block');
 
 const cols = {
@@ -162,12 +167,12 @@ function addBlockToColumn(type){
   block.dataset.value = type==='flat'?100:type==='rod'?10:1;
   block.innerText = ''; // start blank
 
-  // --- Click to reveal ---
+  // Click to reveal
   block.addEventListener('click', ()=>{
     if(block.innerText==='') block.innerText = block.dataset.value;
   });
 
-  // --- Drag & drop for regrouping ---
+  // Drag & drop for regrouping
   block.draggable = true;
   block.addEventListener('dragstart', e=>{
     e.dataTransfer.setData('text/plain', JSON.stringify({type:block.className.split(' ')[1], row:currentRow}));
@@ -193,21 +198,34 @@ Object.values(cols).forEach(col => {
       return rc;
     })();
 
-    if(oldType===targetType){
-      // Same type, move block
-      const block = document.querySelector(`.${oldType}.row${row}:first-child`);
-      rowContainer.appendChild(block);
-    } else {
-      // Regroup: break into smaller blocks
-      const newValue = oldType==='flat'?10:oldType==='rod'?10:1;
+    const op = operationSelect.value;
+
+    // --- Regrouping logic ---
+    if(oldType === targetType) return; // do nothing if same type
+
+    const blockValue = oldType==='flat'?100:oldType==='rod'?10:1;
+
+    if(op==='add'){
+      // Add: smaller blocks replace bigger one
+      const factor = oldType==='flat'?10:oldType==='rod'?10:1;
       const newType = oldType==='flat'?'rod':'rod'?'unit':'unit';
       const count = oldType==='flat'?10:10;
-      for(let i=0;i<10;i++){
+      for(let i=0;i<count;i++){
         addBlockToColumn(newType);
       }
-      // remove the dragged block
-      const block = document.querySelector(`.${oldType}.row${row}:first-child`);
-      if(block) block.remove();
+      // remove dragged block
+      const draggedBlock = document.querySelector(`.${oldType}.row${row}`);
+      if(draggedBlock) draggedBlock.remove();
+
+    } else {
+      // Subtract: moving bigger block into smaller removes it and adds smaller blocks
+      const count = oldType==='flat'?10:oldType==='rod'?10:1;
+      const newType = oldType==='flat'?'rod':'rod'?'unit':'unit';
+      for(let i=0;i<count;i++){
+        addBlockToColumn(newType);
+      }
+      const draggedBlock = document.querySelector(`.${oldType}.row${row}`);
+      if(draggedBlock) draggedBlock.remove();
     }
   });
 });
@@ -236,3 +254,4 @@ switchRowBtn.addEventListener('click', ()=>{
 
 </body>
 </html>
+
