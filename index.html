@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Interactive Base-10 Addition/Subtraction</title>
+<title>Base-10 Addition with Regrouping</title>
 <style>
 body {
   font-family: Arial, sans-serif;
@@ -54,7 +54,7 @@ input, button {
 .rod  { background:#0a0; width:40px; height:40px; }
 .unit { background:#06f; width:30px; height:30px; }
 
-.board-row {
+#board {
   display:flex;
   gap:20px;
   border:2px solid #333;
@@ -62,16 +62,15 @@ input, button {
   padding:20px 10px 60px 10px;
   justify-content:flex-start;
   min-width: 90vw;
-  margin-bottom: 20px;
 }
 
 .column {
   flex:1;
   display:flex;
-  flex-direction:row;
+  flex-direction:column;
   align-items:flex-start;
   border-left:1px solid #333;
-  min-height: 80px;
+  min-height: 120px;
   position:relative;
   flex-wrap: wrap;
   gap:5px;
@@ -87,6 +86,12 @@ input, button {
   font-weight:bold;
 }
 
+.row-blocks {
+  display:flex;
+  gap:5px;
+  margin-bottom:5px;
+}
+
 #equation {
   margin-top:20px;
   font-size:24px;
@@ -97,11 +102,12 @@ input, button {
 </head>
 <body>
 
-<h2>Interactive Base-10 Addition/Subtraction</h2>
+<h2>Base-10 Addition with Regrouping</h2>
 
 <div id="controls">
   <label>Problem: <input type="text" id="problemInput" value="246 + 175"></label>
   <button id="setup">Set Up</button>
+  <button id="switchRow">Switch Number</button>
 </div>
 
 <div id="availableBlocks">
@@ -110,16 +116,10 @@ input, button {
   <div class="block unit" data-value="1">1</div>
 </div>
 
-<div class="board-row" id="topRow">
-  <div class="column" id="topHundreds"><div class="column-label">Hundreds</div></div>
-  <div class="column" id="topTens"><div class="column-label">Tens</div></div>
-  <div class="column" id="topOnes"><div class="column-label">Ones</div></div>
-</div>
-
-<div class="board-row" id="bottomRow">
-  <div class="column" id="bottomHundreds"><div class="column-label">Hundreds</div></div>
-  <div class="column" id="bottomTens"><div class="column-label">Tens</div></div>
-  <div class="column" id="bottomOnes"><div class="column-label">Ones</div></div>
+<div id="board">
+  <div class="column" id="hundredsCol"><div class="column-label">Hundreds</div></div>
+  <div class="column" id="tensCol"><div class="column-label">Tens</div></div>
+  <div class="column" id="onesCol"><div class="column-label">Ones</div></div>
 </div>
 
 <div id="equation">
@@ -129,53 +129,109 @@ input, button {
 <script>
 const problemInput = document.getElementById('problemInput');
 const setupBtn = document.getElementById('setup');
+const switchRowBtn = document.getElementById('switchRow');
 const availableBlocks = document.querySelectorAll('#availableBlocks .block');
 
-const topCols = {
-  flat: document.getElementById('topHundreds'),
-  rod: document.getElementById('topTens'),
-  unit: document.getElementById('topOnes')
+const cols = {
+  flat: document.getElementById('hundredsCol'),
+  rod: document.getElementById('tensCol'),
+  unit: document.getElementById('onesCol')
 };
 
-const bottomCols = {
-  flat: document.getElementById('bottomHundreds'),
-  rod: document.getElementById('bottomTens'),
-  unit: document.getElementById('bottomOnes')
-};
+let currentRow = 1; // 1 = first number, 2 = second number
 
-// --- Clear columns ---
 function clearBoard() {
-  Object.values(topCols).forEach(col => col.innerHTML = '<div class="column-label">'+col.querySelector('.column-label').innerText+'</div>');
-  Object.values(bottomCols).forEach(col => col.innerHTML = '<div class="column-label">'+col.querySelector('.column-label').innerText+'</div>');
+  Object.values(cols).forEach(col => col.innerHTML = '<div class="column-label">'+col.querySelector('.column-label').innerText+'</div>');
+}
+
+// --- Get or create row container ---
+function getRowContainer(col) {
+  let rowContainer = col.querySelector(`.row${currentRow}`);
+  if(!rowContainer){
+    rowContainer = document.createElement('div');
+    rowContainer.classList.add('row-blocks','row'+currentRow);
+    col.appendChild(rowContainer);
+  }
+  return rowContainer;
 }
 
 // --- Add block to column ---
-function addBlockToColumn(type, rowCols){
+function addBlockToColumn(type){
   const block = document.createElement('div');
   block.classList.add('block', type);
   block.dataset.value = type==='flat'?100:type==='rod'?10:1;
   block.innerText = ''; // start blank
+
+  // --- Click to reveal ---
   block.addEventListener('click', ()=>{
-    if(block.innerText==='') block.innerText = block.dataset.value; // reveal value
+    if(block.innerText==='') block.innerText = block.dataset.value;
   });
-  rowCols[type].appendChild(block);
+
+  // --- Drag & drop for regrouping ---
+  block.draggable = true;
+  block.addEventListener('dragstart', e=>{
+    e.dataTransfer.setData('text/plain', JSON.stringify({type:block.className.split(' ')[1], row:currentRow}));
+  });
+
+  const rowContainer = getRowContainer(cols[type]);
+  rowContainer.appendChild(block);
 }
+
+// --- Column drop behavior ---
+Object.values(cols).forEach(col => {
+  col.addEventListener('dragover', e=>e.preventDefault());
+  col.addEventListener('drop', e=>{
+    e.preventDefault();
+    const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+    const oldType = data.type;
+    const row = data.row;
+    const targetType = col.id==='hundredsCol'?'flat':col.id==='tensCol'?'rod':'unit';
+    const rowContainer = col.querySelector(`.row${row}`) || (()=>{
+      let rc = document.createElement('div');
+      rc.classList.add('row-blocks','row'+row);
+      col.appendChild(rc);
+      return rc;
+    })();
+
+    if(oldType===targetType){
+      // Same type, move block
+      const block = document.querySelector(`.${oldType}.row${row}:first-child`);
+      rowContainer.appendChild(block);
+    } else {
+      // Regroup: break into smaller blocks
+      const newValue = oldType==='flat'?10:oldType==='rod'?10:1;
+      const newType = oldType==='flat'?'rod':'rod'?'unit':'unit';
+      const count = oldType==='flat'?10:10;
+      for(let i=0;i<10;i++){
+        addBlockToColumn(newType);
+      }
+      // remove the dragged block
+      const block = document.querySelector(`.${oldType}.row${row}:first-child`);
+      if(block) block.remove();
+    }
+  });
+});
 
 // --- Available block click ---
 availableBlocks.forEach(b => {
   b.addEventListener('click', ()=>{
     const type = b.classList.contains('flat')?'flat':b.classList.contains('rod')?'rod':'unit';
-    addBlockToColumn(type, topCols);
+    addBlockToColumn(type);
   });
 });
 
 // --- Setup button ---
 setupBtn.addEventListener('click', ()=>{
   clearBoard();
+  currentRow = 1;
   const problem = problemInput.value;
   document.getElementById('equation').innerText = problem.replace(/\d+/g,'___');
 });
 
+// --- Switch row button ---
+switchRowBtn.addEventListener('click', ()=>{
+  currentRow = currentRow===1?2:1;
+});
 </script>
 
 </body>
